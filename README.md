@@ -2,8 +2,9 @@
 
 # project-user-roles
 
-Shows user roles and permissions for a Paratext project, read from that project's
-`ProjectUserAccess.xml`. Built from paranext-extension-template.
+Shows user roles and permissions for a Paratext 10 project, read from that project's
+`ProjectUserAccess.xml`. Built from paranext-extension-template. If the user is an administrator of the project, the roles can
+be modified (changing edit permissions for books, etc). Major changes like adding or removing users, or modifying a user's role need to be done in the registry. 
 
 Open it from a project's **Project** menu (_Project User Roles..._) or pick a project from the
 dropdown. Everyone can view the project's users, roles, book access and permissions. If the
