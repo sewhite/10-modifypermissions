@@ -48,10 +48,6 @@ const PERMISSION_LABELS: Record<ProjectPermissionType, string> = {
  */
 type DraftUser = ProjectUserDraft & {
   firstUser: boolean;
-  /** Added in this draft - not yet in the project on disk */
-  isNew: boolean;
-  /** Marked for removal in this draft - still shown (struck through) so it can be undone */
-  removed: boolean;
 };
 
 function toDraft(users: ProjectUserInfo[]): DraftUser[] {
@@ -63,8 +59,6 @@ function toDraft(users: ProjectUserInfo[]): DraftUser[] {
     books: [...user.books],
     permissions: { ...user.permissions },
     firstUser: user.firstUser,
-    isNew: false,
-    removed: false,
   }));
 }
 
@@ -80,7 +74,6 @@ function normalizeForCompare(draft: DraftUser[]) {
     allBooks: user.allBooks,
     books: user.books,
     permissions: PERMISSION_TYPES.map((type) => user.permissions[type] === true),
-    removed: user.removed,
   }));
 }
 
@@ -95,18 +88,37 @@ type PersistedDraft = {
   users: DraftUser[];
 };
 
-/** Strips draft-only bookkeeping and dropped users, producing what the Save command expects */
+/**
+ * Strips draft-only bookkeeping, producing what the Save command expects. Users and roles are
+ * passed through exactly as they are on disk: adding, removing or changing the role of a user has
+ * to be done on the Paratext Registry (so the registry and ProjectUserAccess.xml stay in step), so
+ * this view only ever changes book access and permissions.
+ */
 function toChangeSet(draft: DraftUser[]): ProjectUserDraft[] {
-  return draft
-    .filter((user) => !user.removed)
-    .map(({ userName, role, unregisteredUser, allBooks, books, permissions }) => ({
-      userName,
-      role,
-      unregisteredUser,
-      allBooks,
-      books,
-      permissions,
-    }));
+  return draft.map(({ userName, role, unregisteredUser, allBooks, books, permissions }) => ({
+    userName,
+    role,
+    unregisteredUser,
+    allBooks,
+    books,
+    permissions,
+  }));
+}
+
+/**
+ * Roles that can never edit books in Paratext, so book-access controls don't apply to them, mapped
+ * to the note shown in their place. A user removed from the project stays in ProjectUserAccess.xml
+ * with the role "None".
+ */
+const NON_EDITING_ROLE_NOTES: Record<string, string> = {
+  observer: 'Observers cannot edit books',
+  consultant: 'Consultants cannot edit books',
+  none: 'Removed from the project',
+};
+
+/** The note to show instead of book-access controls, or undefined if this role can edit books */
+function getNonEditingRoleNote(role: string): string | undefined {
+  return NON_EDITING_ROLE_NOTES[role.trim().toLowerCase()];
 }
 
 /**
@@ -271,7 +283,9 @@ globalThis.webViewComponent = function ProjectUserRoles({
   const justSavedRef = useRef(false);
   const setDraft = (
     update:
-      DraftUser[] | undefined | ((current: DraftUser[] | undefined) => DraftUser[] | undefined),
+      | DraftUser[]
+      | undefined
+      | ((current: DraftUser[] | undefined) => DraftUser[] | undefined),
   ) => {
     const next = typeof update === 'function' ? update(draftRef.current) : update;
     draftRef.current = next;
@@ -417,21 +431,6 @@ globalThis.webViewComponent = function ProjectUserRoles({
     });
   }
 
-  function handleChangeRole(userName: string, role: string) {
-    updateDraftUser(userName, (user) => ({ ...user, role }));
-  }
-
-  function handleSetRemoved(userName: string, removed: boolean) {
-    setSavedMessage(undefined);
-    setDraft((current) => {
-      if (!current) return current;
-      // A user added in this same draft can simply be dropped again rather than struck through
-      if (removed && current.some((user) => user.userName === userName && user.isNew))
-        return current.filter((user) => user.userName !== userName);
-      return current.map((user) => (user.userName === userName ? { ...user, removed } : user));
-    });
-  }
-
   function handleCancel() {
     setSaveError(undefined);
     setSavedMessage(undefined);
@@ -517,8 +516,9 @@ globalThis.webViewComponent = function ProjectUserRoles({
 
       {isAdministrator && (
         <div className="tw:text-muted-foreground tw:text-sm">
-          You are this project&rsquo;s Administrator. Changes you make below are not written to the
-          project until you click Save.
+          You are this project&rsquo;s Administrator. You can change users&rsquo; book access and
+          permissions below; nothing is written to the project until you click Save. User roles are
+          shown for reference only and must be changed on the Paratext Registry.
         </div>
       )}
 
@@ -530,23 +530,15 @@ globalThis.webViewComponent = function ProjectUserRoles({
               <TableHead>Role</TableHead>
               <TableHead>Books</TableHead>
               <TableHead>Permissions</TableHead>
-              {isAdministrator && <TableHead />}
             </TableRow>
           </TableHeader>
           <TableBody>
             {usersToShow.map((user) => {
               const isCurrentUser = user.userName === rolesData.currentUserName;
-              const editable = isAdministrator && !user.removed;
-              const removeBlockedReason = user.firstUser
-                ? 'The project owner cannot be removed'
-                : isCurrentUser
-                  ? 'You cannot remove yourself - another Administrator must'
-                  : undefined;
+              const editable = isAdministrator;
+              const nonEditingRoleNote = getNonEditingRoleNote(user.role);
               return (
-                <TableRow
-                  key={user.userName}
-                  className={user.removed ? 'tw:line-through tw:opacity-50' : ''}
-                >
+                <TableRow key={user.userName}>
                   <TableCell>
                     {user.userName}
                     {user.firstUser && (
@@ -564,49 +556,27 @@ globalThis.webViewComponent = function ProjectUserRoles({
                         You
                       </Badge>
                     )}
-                    {user.isNew && (
-                      <Badge variant="default" className="tw:ml-2">
-                        New
-                      </Badge>
-                    )}
-                    {user.removed && (
-                      <Badge variant="destructive" className="tw:ml-2">
-                        Will be removed
-                      </Badge>
-                    )}
                   </TableCell>
+                  <TableCell>{user.role}</TableCell>
                   <TableCell>
-                    {editable && !isCurrentUser ? (
-                      <Select
-                        value={user.role}
-                        onValueChange={(role) => handleChangeRole(user.userName, role)}
-                      >
-                        <SelectTrigger className="pr-twp tw:w-40" aria-label="Role">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent className="pr-twp">
-                          {rolesData.availableRoles.map((role) => (
-                            <SelectItem key={role} value={role}>
-                              {role}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                    {nonEditingRoleNote === undefined ? (
+                      <BookAccess
+                        allBooks={user.allBooks}
+                        books={user.books}
+                        editable={editable}
+                        availableBookIds={rolesData.allProjectBookIds}
+                        onToggleAllBooks={(allBooks) =>
+                          handleToggleAllBooks(user.userName, allBooks)
+                        }
+                        onToggleBook={(bookId, granted) =>
+                          handleToggleBook(user.userName, bookId, granted)
+                        }
+                      />
                     ) : (
-                      user.role
+                      <span className="tw:text-muted-foreground tw:text-sm">
+                        {nonEditingRoleNote}
+                      </span>
                     )}
-                  </TableCell>
-                  <TableCell>
-                    <BookAccess
-                      allBooks={user.allBooks}
-                      books={user.books}
-                      editable={editable}
-                      availableBookIds={rolesData.allProjectBookIds}
-                      onToggleAllBooks={(allBooks) => handleToggleAllBooks(user.userName, allBooks)}
-                      onToggleBook={(bookId, granted) =>
-                        handleToggleBook(user.userName, bookId, granted)
-                      }
-                    />
                   </TableCell>
                   <TableCell>
                     <Permissions
@@ -617,32 +587,6 @@ globalThis.webViewComponent = function ProjectUserRoles({
                       }
                     />
                   </TableCell>
-                  {isAdministrator && (
-                    <TableCell className="tw:text-right">
-                      {user.removed ? (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleSetRemoved(user.userName, false)}
-                        >
-                          Undo
-                        </Button>
-                      ) : (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="tw:text-destructive"
-                          disabled={removeBlockedReason !== undefined}
-                          title={removeBlockedReason}
-                          onClick={() => handleSetRemoved(user.userName, true)}
-                        >
-                          Remove
-                        </Button>
-                      )}
-                    </TableCell>
-                  )}
                 </TableRow>
               );
             })}
@@ -653,11 +597,14 @@ globalThis.webViewComponent = function ProjectUserRoles({
       {isAdministrator && rolesData && draft && (
         <>
           <div className="tw:flex tw:flex-col tw:gap-1 tw:rounded-md tw:border tw:p-3">
-            <div className="tw:text-sm tw:font-semibold">Adding users</div>
+            <div className="tw:text-sm tw:font-semibold">
+              Adding, removing or changing user roles
+            </div>
             <div className="tw:text-muted-foreground tw:text-sm">
-              New users must be added to the project on the Paratext Registry, which also gives them
-              access through Send/Receive. Once they are members there, they appear here after the
-              next Send/Receive and you can set their books and permissions.
+              Adding users, removing users and changing a user&rsquo;s role must be done on the
+              Paratext Registry, so that the change is recorded there as well as in the project and
+              reaches everyone through Send/Receive. After the next Send/Receive, the changes appear
+              here and you can set users&rsquo; books and permissions.
             </div>
             {rolesData.registryId ? (
               <Button

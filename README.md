@@ -7,20 +7,19 @@ Shows user roles and permissions for a Paratext project, read from that project'
 
 Open it from a project's **Project** menu (_Project User Roles..._) or pick a project from the
 dropdown. Everyone can view the project's users, roles, book access and permissions. If the
-Paratext user registered on this computer is the project's **Administrator**, the table becomes
-editable:
+Paratext user registered on this computer is the project's **Administrator**, book access and
+permissions become editable:
 
-- change any user's role, "All books" switch, individual books, and permissions;
-- **Remove** a user (the project owner and you yourself cannot be removed - another Administrator
-  has to remove you);
-- follow the **Paratext Registry** link to the project's Members page
+- change any user's "All books" switch, individual books, and permissions (book controls are not
+  shown for Observers and Consultants, who can never edit books, or for users whose role is "None",
+  which is how a user removed from the project stays listed);
+- user roles are shown for reference only. **Adding, removing or changing the role of a user** has
+  to be done on the Paratext Registry, so the change is recorded there as well as in
+  `ProjectUserAccess.xml` - follow the **Paratext Registry** link to the project's Members page
   (`https://registry.paratext.org/projects/<ParatextRegistryId>#members`, using the registration
-  code from the project's `Settings.xml`) to add new users - users have to be added there, not in
-  the local file, so that Send/Receive gives them access; they show up here after the next
-  Send/Receive;
+  code from the project's `Settings.xml`); the changes show up here after the next Send/Receive;
 - nothing is written to the project until you click **Save**; **Cancel** throws the draft away.
-  Save writes all of your changes to `ProjectUserAccess.xml` in one go, and refuses (writing
-  nothing) any change set that would leave the project with no Administrator or demote you.
+  Save writes all of your changes to `ProjectUserAccess.xml` in one go.
 
 The disk I/O lives in `assets/project-scanner.js`, which runs as a separate Node process via the
 `createProcess` elevated privilege; `src/main.ts` exposes it as `projectUserRoles.*` commands
