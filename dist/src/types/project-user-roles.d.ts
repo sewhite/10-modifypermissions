@@ -65,10 +65,10 @@ declare module 'project-user-roles' {
      */
     currentUserIsAdministrator: boolean;
     /**
-     * Every book id used anywhere in this project (the union of all users' `books` lists, in the
-     * order each id first appears - typically canon order). There's no fixed canonical book list to
-     * fall back on instead, since which books/peripheral-matter ids exist varies by project, so
-     * this is empty if every user in the project has `allBooks: true`.
+     * Every book id used anywhere in this project (the union of all users' `books` lists, in
+     * canonical order). There's no fixed book list to fall back on instead, since which
+     * books/peripheral-matter ids exist varies by project, so this is empty if every user in the
+     * project has `allBooks: true`.
      */
     allProjectBookIds: string[];
     /**
