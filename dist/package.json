@@ -1,7 +1,7 @@
 {
   "name": "project-user-roles",
   "private": true,
-  "version": "0.0.1",
+  "version": "0.1.0",
   "main": "src/main.js",
   "types": "src/types/project-user-roles.d.ts",
   "author": "Steve White",
