@@ -119,6 +119,36 @@ function listProjects() {
 /** Roles Paratext itself knows about, as spelled in ProjectUserAccess.xml's <Role> element. */
 const VALID_ROLES = ['Administrator', 'Translator', 'Consultant', 'Observer', 'TypeSetter'];
 
+/**
+ * Every book id Paratext knows, in its canonical order (Paratext book numbers 1-123, the same list
+ * as `Canon.allBookIds` in @sillsdev/scripture). Used only to sort book lists for display.
+ */
+const CANONICAL_BOOK_IDS = [
+  'GEN', 'EXO', 'LEV', 'NUM', 'DEU', 'JOS', 'JDG', 'RUT', '1SA', '2SA', '1KI', '2KI', '1CH', '2CH',
+  'EZR', 'NEH', 'EST', 'JOB', 'PSA', 'PRO', 'ECC', 'SNG', 'ISA', 'JER', 'LAM', 'EZK', 'DAN', 'HOS',
+  'JOL', 'AMO', 'OBA', 'JON', 'MIC', 'NAM', 'HAB', 'ZEP', 'HAG', 'ZEC', 'MAL', 'MAT', 'MRK', 'LUK',
+  'JHN', 'ACT', 'ROM', '1CO', '2CO', 'GAL', 'EPH', 'PHP', 'COL', '1TH', '2TH', '1TI', '2TI', 'TIT',
+  'PHM', 'HEB', 'JAS', '1PE', '2PE', '1JN', '2JN', '3JN', 'JUD', 'REV', 'TOB', 'JDT', 'ESG', 'WIS',
+  'SIR', 'BAR', 'LJE', 'S3Y', 'SUS', 'BEL', '1MA', '2MA', '3MA', '4MA', '1ES', '2ES', 'MAN', 'PS2',
+  'ODA', 'PSS', 'JSA', 'JDB', 'TBS', 'SST', 'DNT', 'BLT', 'XXA', 'XXB', 'XXC', 'XXD', 'XXE', 'XXF',
+  'XXG', 'FRT', 'BAK', 'OTH', '3ES', 'EZA', '5EZ', '6EZ', 'INT', 'CNC', 'GLO', 'TDX', 'NDX', 'DAG',
+  'PS3', '2BA', 'LBA', 'JUB', 'ENO', '1MQ', '2MQ', '3MQ', 'REP', '4BA', 'LAO',
+];
+const CANONICAL_BOOK_INDEX = new Map(CANONICAL_BOOK_IDS.map((bookId, index) => [bookId, index]));
+
+/**
+ * A copy of `bookIds` in canonical order. Ids Paratext doesn't know go last, in their original
+ * order (Array.prototype.sort is stable).
+ */
+function sortBookIdsCanonically(bookIds) {
+  const rank = (bookId) => CANONICAL_BOOK_INDEX.get(bookId.toUpperCase()) ?? Infinity;
+  return [...bookIds].sort((a, b) => {
+    const rankA = rank(a);
+    const rankB = rank(b);
+    return rankA === rankB ? 0 : rankA - rankB;
+  });
+}
+
 const ENTITY_MAP = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };
 
 function xmlUnescape(text) {
@@ -171,15 +201,14 @@ function parseUser(userXml, openTag) {
     unregisteredUser: getAttr(openTag, 'UnregisteredUser') === 'true',
     role: getElementText(userXml, 'Role') ?? '',
     allBooks: getElementText(userXml, 'AllBooks') === 'true',
-    books,
+    books: sortBookIdsCanonically(books),
     permissions,
   };
 }
 
 /**
  * The set of book ids this project actually uses, as the union of every user's explicit `books`
- * list (in the order each id first appears - typically canon order, since that's how Paratext
- * itself writes each user's list). There's no fixed canonical book list we can rely on instead:
+ * list, in canonical order. The canonical list only gives the order, not which books exist:
  * exactly which books/peripheral-matter ids exist varies by project. A project where every user has
  * `AllBooks` set (so nobody has an explicit list to draw from) will get an empty result here.
  */
@@ -193,7 +222,7 @@ function getAllProjectBookIds(users) {
       bookIds.push(bookId);
     }
   }
-  return bookIds;
+  return sortBookIdsCanonically(bookIds);
 }
 
 /** Roles a user may be given: Paratext's own, plus any other role text already in this file. */
