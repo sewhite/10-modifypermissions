@@ -1,7 +1,11 @@
 declare module 'project-user-roles' {
   /** One permission flag as recorded in ProjectUserAccess.xml */
   export type ProjectPermissionType =
-    'TermsList' | 'Renderings' | 'Spellings' | 'Passages' | 'Progress';
+    | 'TermsList'
+    | 'Renderings'
+    | 'Spellings'
+    | 'Passages'
+    | 'Progress';
 
   /** A single user's role, book access, and permissions for a project */
   export type ProjectUserInfo = {
@@ -65,12 +69,16 @@ declare module 'project-user-roles' {
      */
     currentUserIsAdministrator: boolean;
     /**
-     * Every book id used anywhere in this project (the union of all users' `books` lists, in
-     * canonical order). There's no fixed book list to fall back on instead, since which
-     * books/peripheral-matter ids exist varies by project, so this is empty if every user in the
-     * project has `allBooks: true`.
+     * Every book id an Administrator may grant individually, in canonical order: the books present
+     * in the project, all Old and New Testament books (so a book can be granted before it is
+     * created), and any other book already in some user's `books` list.
      */
     allProjectBookIds: string[];
+    /**
+     * The book ids that exist in the project (from `<BooksPresent>` in Settings.xml), in canonical
+     * order. Empty if Settings.xml couldn't be read.
+     */
+    presentBookIds: string[];
     /**
      * Roles a user in this project may be given: the roles Paratext itself defines, plus any other
      * role text already present in this project's file.
@@ -78,8 +86,8 @@ declare module 'project-user-roles' {
     availableRoles: string[];
     /**
      * The project's registration code on the Paratext Registry (from `<ParatextRegistryId>` in
-     * Settings.xml), used to link to the project's Members page where users are added. Undefined
-     * if the project is not registered.
+     * Settings.xml), used to link to the project's Members page where users are added. Undefined if
+     * the project is not registered.
      */
     registryId?: string;
   };

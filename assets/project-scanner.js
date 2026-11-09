@@ -206,23 +206,35 @@ function parseUser(userXml, openTag) {
   };
 }
 
+/** The 66 Old and New Testament books, which an Administrator may grant before they are created. */
+const OT_NT_BOOK_IDS = CANONICAL_BOOK_IDS.slice(0, 66);
+
 /**
- * The set of book ids this project actually uses, as the union of every user's explicit `books`
- * list, in canonical order. The canonical list only gives the order, not which books exist:
- * exactly which books/peripheral-matter ids exist varies by project. A project where every user has
- * `AllBooks` set (so nobody has an explicit list to draw from) will get an empty result here.
+ * The book ids that exist in the project, from `<BooksPresent>` in its Settings.xml: a string of
+ * '0'/'1' characters where character N says whether Paratext book number N+1 (i.e.
+ * CANONICAL_BOOK_IDS[N]) is present. Empty if the file or element can't be read.
  */
-function getAllProjectBookIds(users) {
-  const seen = new Set();
-  const bookIds = [];
-  for (const user of users) {
-    for (const bookId of user.books) {
-      if (seen.has(bookId)) continue;
-      seen.add(bookId);
-      bookIds.push(bookId);
-    }
+function getBooksPresent(projectPath) {
+  try {
+    const xml = fs.readFileSync(path.join(projectPath, 'Settings.xml'), 'utf8').replace(/^﻿/, '');
+    const flags = getElementText(xml, 'BooksPresent') ?? '';
+    return CANONICAL_BOOK_IDS.filter((bookId, index) => flags[index] === '1');
+  } catch {
+    return [];
   }
-  return sortBookIdsCanonically(bookIds);
+}
+
+/**
+ * Every book id an Administrator may grant individually, in canonical order: the books present in
+ * the project, plus all Old and New Testament books (a user needs permission for a book before they
+ * can create it), plus any other book already granted to someone (so it can still be revoked).
+ */
+function getAllProjectBookIds(users, presentBookIds) {
+  const bookIds = new Set([...presentBookIds, ...OT_NT_BOOK_IDS]);
+  for (const user of users) {
+    for (const bookId of user.books) bookIds.add(bookId);
+  }
+  return sortBookIdsCanonically([...bookIds]);
 }
 
 /** Roles a user may be given: Paratext's own, plus any other role text already in this file. */
@@ -266,11 +278,13 @@ function getRolesPermissions(projectPath) {
     users.push(parseUser(body, `<User ${attrs}>`));
   }
 
+  const presentBookIds = getBooksPresent(projectPath);
   return {
     projectId: path.basename(projectPath),
     peerSharing,
     users,
-    allProjectBookIds: getAllProjectBookIds(users),
+    allProjectBookIds: getAllProjectBookIds(users, presentBookIds),
+    presentBookIds,
     availableRoles: getAvailableRoles(users),
     registryId: getRegistryId(projectPath),
   };
