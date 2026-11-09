@@ -122,6 +122,12 @@ function getNonEditingRoleNote(role: string): string | undefined {
 }
 
 /**
+ * How a book that isn't in the project yet is set apart. An inline style, since `tw:` utilities can
+ * lose to platform-bible-react's own styles on its components (see BookAccess).
+ */
+const NOT_IN_PROJECT_STYLE = { borderStyle: 'dashed', opacity: 0.6 } as const;
+
+/**
  * Shows a user's book access as read-only text, or - when `editable` - as an "All books" switch
  * plus a clickable badge per book an Administrator can use to grant/revoke individual books (this
  * is the permission that changes most often, so it gets one click per book rather than a menu).
@@ -131,14 +137,17 @@ function BookAccess({
   books,
   editable,
   availableBookIds,
+  presentBookIds,
   onToggleAllBooks,
   onToggleBook,
 }: {
   allBooks: boolean;
   books: string[];
   editable: boolean;
-  /** Every book id known to exist in this project, to offer as toggles */
+  /** Every book id an Administrator may grant, to offer as toggles */
   availableBookIds: string[];
+  /** The book ids that exist in the project; the others are shown dimmed */
+  presentBookIds: string[];
   onToggleAllBooks?: (allBooks: boolean) => void;
   onToggleBook?: (bookId: string, granted: boolean) => void;
 }) {
@@ -153,6 +162,7 @@ function BookAccess({
   }
 
   const grantedBookIds = new Set(books);
+  const presentSet = new Set(presentBookIds);
 
   return (
     <div className="tw:flex tw:flex-col tw:gap-1.5">
@@ -164,32 +174,35 @@ function BookAccess({
         />
         All books
       </span>
-      {!allBooks &&
-        (availableBookIds.length > 0 ? (
-          <div className="tw:flex tw:max-w-xs tw:flex-wrap tw:gap-1">
-            {availableBookIds.map((bookId) => {
-              const granted = grantedBookIds.has(bookId);
-              return (
-                <button
-                  key={bookId}
-                  type="button"
-                  onClick={() => onToggleBook?.(bookId, !granted)}
-                  className={`tw:cursor-pointer tw:rounded-full tw:border tw:px-2.5 tw:py-0.5 tw:text-xs tw:font-semibold tw:transition-colors ${
-                    granted
-                      ? 'tw:border-transparent tw:bg-primary tw:text-primary-foreground'
-                      : 'tw:text-muted-foreground tw:hover:bg-accent tw:hover:text-accent-foreground'
-                  }`}
+      {!allBooks && (
+        <div className="tw:flex tw:max-w-xs tw:flex-wrap tw:gap-1">
+          {availableBookIds.map((bookId) => {
+            const granted = grantedBookIds.has(bookId);
+            const present = presentSet.has(bookId);
+            return (
+              // The look comes from platform-bible-react's Badge, not from `tw:` classes on the
+              // <button>: platform-bible-react's CSS resets <button> background, color, padding and
+              // border outside any cascade layer, which beats this extension's layered `tw:`
+              // utilities - styled that way, granted and ungranted books looked identical.
+              <button
+                key={bookId}
+                type="button"
+                aria-pressed={granted}
+                title={present ? undefined : `${bookId} is not in the project yet`}
+                onClick={() => onToggleBook?.(bookId, !granted)}
+                className="tw:cursor-pointer"
+              >
+                <Badge
+                  variant={granted ? 'default' : 'outline'}
+                  style={present ? undefined : NOT_IN_PROJECT_STYLE}
                 >
                   {bookId}
-                </button>
-              );
-            })}
-          </div>
-        ) : (
-          <span className="tw:text-muted-foreground tw:text-xs">
-            No specific books known for this project yet
-          </span>
-        ))}
+                </Badge>
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -565,6 +578,7 @@ globalThis.webViewComponent = function ProjectUserRoles({
                         books={user.books}
                         editable={editable}
                         availableBookIds={rolesData.allProjectBookIds}
+                        presentBookIds={rolesData.presentBookIds ?? []}
                         onToggleAllBooks={(allBooks) =>
                           handleToggleAllBooks(user.userName, allBooks)
                         }
